@@ -34,6 +34,27 @@ def isTimeBetween(begin_time, end_time, check_time=None):
     else:
         return check_time >= begin_time or check_time <= end_time
 
+def shutdown(signal, frame):
+    manager.outlets[0].turn_off()
+    manager.outlets[1].turn_off()
+    manager.outlets[2].turn_off()
+    print("signal: ", sig, frame)
+    return
+
+# Handle signals
+catchable_sigs = set(signal.Signals)
+for sig in catchable_sigs:
+    try:
+        signal.signal(sig, shutdown)
+    except (ValueError, OSError, RuntimeError) as m:
+        pass
+
+# Press some keys or issue kill
+x = 0
+while x < 5:
+    time.sleep(4)
+    x += 1
+
 # Wait for the co2 sensor to be ready
 while not CCS811_SENSOR.data_ready:
     pass
