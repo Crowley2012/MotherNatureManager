@@ -3,10 +3,14 @@ from influxdb import InfluxDBClient
 from pyvesync import VeSync
 from time import sleep
 
+import sys
+import signal
 import board
 import busio
 import adafruit_ccs811
 import Adafruit_DHT
+
+loop = True
 
 # Sensor Setup
 I2C = busio.I2C(board.SCL, board.SDA)
@@ -22,7 +26,7 @@ client.switch_database('environments')
 light = 0
 fan = 0
 humidifier = 0
-manager = VeSync(, )
+manager = VeSync()
 manager.login()
 manager.update()
 
@@ -35,11 +39,12 @@ def isTimeBetween(begin_time, end_time, check_time=None):
         return check_time >= begin_time or check_time <= end_time
 
 def shutdown(signal, frame):
+    global loop
+    loop = False
     manager.outlets[0].turn_off()
     manager.outlets[1].turn_off()
     manager.outlets[2].turn_off()
-    print("signal: ", sig, frame)
-    return
+    sys.exit()
 
 # Handle signals
 catchable_sigs = set(signal.Signals)
@@ -49,27 +54,21 @@ for sig in catchable_sigs:
     except (ValueError, OSError, RuntimeError) as m:
         pass
 
-# Press some keys or issue kill
-x = 0
-while x < 5:
-    time.sleep(4)
-    x += 1
-
 # Wait for the co2 sensor to be ready
 while not CCS811_SENSOR.data_ready:
     pass
 
-while True:
+while loop:
     try:
         humidity, tempC = Adafruit_DHT.read(DHT_SENSOR, DHT_PIN)
         tempF = (tempC * (9/5)) + 32
         co2 = CCS811_SENSOR.eco2
         tvoc = CCS811_SENSOR.tvoc
 
-        #Manage switches
-        #0 - Light | 1 - Fan | 2 - Humidifier
+        # Manage switches
+        # 0 - Light | 1 - Fan | 2 - Humidifier
 
-        #Light
+        # Light
         if isTimeBetween(time(16,00), time(4,00)):
                 manager.outlets[0].turn_on()
                 light = 1
@@ -77,7 +76,7 @@ while True:
                 manager.outlets[0].turn_off()
                 light = 0
 
-        #Fan
+        # Fan
         if humidity > 88 or tempF > 80:
                 manager.outlets[1].turn_on()
                 fan = 1
@@ -85,7 +84,7 @@ while True:
                 manager.outlets[1].turn_off()
                 fan = 0
 
-        #Humidifier
+        # Humidifier
         if humidity < 82:
                 manager.outlets[2].turn_on()
                 humidifier = 1
@@ -93,7 +92,7 @@ while True:
                 manager.outlets[2].turn_off()
                 humidifier = 0
 
-        #Build database object
+        # Build database object
         json = [{
             "measurement": "environment",
             "tags": {
@@ -112,9 +111,10 @@ while True:
             }
         }]
 
-        #Write to database
+        # Write to database
         client.write_points(json)
 
+        print(loop)
         sleep(10);
 
     except:
@@ -123,4 +123,4 @@ while True:
         manager.outlets[1].turn_off()
         manager.outlets[2].turn_off()
 
-        time.sleep(1);
+        sleep(1);
